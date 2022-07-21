@@ -1,0 +1,6 @@
+name: Account Auto Deactivation
+type: module
+description: 'Automatically deactivates Temp Accounts after a set time'
+package: Custom
+core: 8.x
+core_version_requirement: ^8 || ^9

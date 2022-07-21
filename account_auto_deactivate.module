@@ -1,0 +1,74 @@
+<?php
+
+/**
+ * @file
+ * Module automatically disables 'Temp' users after pretermined time after saved information.
+ */
+
+use Drupal\user\Entity\User;
+use Drupal\user\UserInterface;
+use Drupal\user\Access\RoleAccessCheck;
+
+
+
+function timestampdiff($account_prior_save, $current_time) {
+
+  $time_elapsed = $current_time - $account_prior_save;
+  $minutes = $time_elapsed/60;
+  $hours = $minutes/60;
+  //return the hours;
+  return $hours;
+}
+
+function account_auto_deactivate_users() {
+
+  $current_time = time();
+  // current temp account time: 5 days in hours
+  $allowed_time = 120;
+  // account type
+  $role = 'temp';
+
+  $ids = \Drupal::entityQuery('user')
+  ->condition('roles', $role, 'CONTAINS')
+  ->execute();
+
+  $to_delete_users = User::loadMultiple($ids);
+  $disable_account_method = 'user_cancel_block';
+  $edit = [
+    'user_cancel_notify' => FALSE,
+  ];
+
+   foreach ($to_delete_users as $user) {
+     // $account_creation_time = $user->getCreatedTime();
+     // Use prior save, assuming last save is to activate account on temp user
+     $account_prior_save = $user->getChangedTime();
+     // Check if not first save, and don't block any admin accounts
+     if ($account_prior_save != 0 && !$user->hasRole('administrator')) {
+       $dif = timestampdiff($account_prior_save, $current_time);
+       if ($dif >= $allowed_time) {
+           user_cancel($edit, $user->get('uid')->value, $disable_account_method);
+       }
+     }
+   }
+}
+
+
+ /**
+  * Implements hook_cron().
+  */
+ function account_auto_deactivate_cron() {
+   // Disable inactive users based on configured rules.
+   account_auto_deactivate_users();
+   // Run batch to complete account cancelation
+   // Drush check is failing, due wrong condition, however this may not
+   // correct either, isset($batch['sets']) could be better.
+   $batch =& batch_get();
+   if (count($batch) > 0) {
+     // Process the deletion with batch.
+     // This is not ideal, but in this way we won't notify users that
+     // wasn't deleted at the end also it doesn't break the whole process,
+     // max the current loop will fail.
+       $batch['progressive'] = FALSE;
+       batch_process();
+   }
+ }
